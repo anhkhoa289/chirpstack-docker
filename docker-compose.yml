@@ -1,10 +1,47 @@
 version: "3"
 
 services:
+  traefik:
+    image: traefik:v2.10
+    restart: always
+    command:
+      # - --log.level=DEBUG
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=global
+      # - --providers.file.filename=/etc/traefik/traefik-routers.yml
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.myresolver.acme.tlschallenge=true
+      # - --certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
+      - --certificatesresolvers.myresolver.acme.email=khoa.nguyen@stunited.vn
+      - --certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      # - ./traefik-routers.yml:/etc/traefik/traefik-routers.yml
+      - ./letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      traefik.enable: true
+      traefik.http.routers.dashboard.rule: Host(`dashboard.lns.veep.vn`)
+      traefik.http.routers.dashboard.entrypoints: websecure
+      traefik.http.routers.dashboard.tls.certresolver: myresolver
+      traefik.http.routers.dashboard.service: api@internal
+      traefik.http.routers.dashboard.middlewares: dashboard_auth
+      traefik.http.middlewares.dashboard_auth.basicauth.users: $DASHBOARD_USER
+
+
+
+
+
   chirpstack:
     image: chirpstack/chirpstack:4
     command: -c /etc/chirpstack
-    restart: unless-stopped
     volumes:
       - ./configuration/chirpstack:/etc/chirpstack
       - ./lorawan-devices:/opt/lorawan-devices
@@ -18,48 +55,89 @@ services:
       - POSTGRESQL_HOST=postgres
     ports:
       - 8080:8080
+    labels:
+      traefik.enable: true
+      traefik.http.routers.chirpstack.rule: Host(`lns.veep.vn`)
+      traefik.http.routers.chirpstack.entrypoints: websecure
+      traefik.http.routers.chirpstack.tls.certresolver: myresolver
+      traefik.http.routers.chirpstack.service: chirpstack
+      traefik.http.services.chirpstack.loadbalancer.server.port: 8080
 
-  chirpstack-gateway-bridge-eu868:
+  chirpstack-gateway-bridge-as923:
     image: chirpstack/chirpstack-gateway-bridge:4
-    restart: unless-stopped
     ports:
       - 1700:1700/udp
     volumes:
-      - ./configuration/chirpstack-gateway-bridge:/etc/chirpstack-gateway-bridge
+      - ./configuration/chirpstack-gateway-bridge-as923:/etc/chirpstack-gateway-bridge
     depends_on: 
       - mosquitto
+    labels:
+      traefik.enable: true
+      traefik.http.routers.chirpstack-bridge.rule: Host(`bridge-923.lns.veep.vn`)
+      traefik.http.routers.chirpstack-bridge.entrypoints: websecure
+      traefik.http.routers.chirpstack-bridge.tls.certresolver: myresolver
+      traefik.http.routers.chirpstack-bridge.service: chirpstack-bridge
+      traefik.http.services.chirpstack-bridge.loadbalancer.server.port: 1700
+
+  chirpstack-gateway-bridge-as923_2:
+    image: chirpstack/chirpstack-gateway-bridge:4
+    ports:
+      - 1701:1700/udp
+    volumes:
+      - ./configuration/chirpstack-gateway-bridge-as923_2:/etc/chirpstack-gateway-bridge
+    depends_on: 
+      - mosquitto
+    labels:
+      traefik.enable: true
+      traefik.http.routers.chirpstack-bridge.rule: Host(`bridge-923_2.lns.veep.vn`)
+      traefik.http.routers.chirpstack-bridge.entrypoints: websecure
+      traefik.http.routers.chirpstack-bridge.tls.certresolver: myresolver
+      traefik.http.routers.chirpstack-bridge.service: chirpstack-bridge
+      traefik.http.services.chirpstack-bridge.loadbalancer.server.port: 1701
 
   chirpstack-rest-api:
     image: chirpstack/chirpstack-rest-api:4
-    restart: unless-stopped
     command: --server chirpstack:8080 --bind 0.0.0.0:8090 --insecure
     ports:
       - 8090:8090
     depends_on:
       - chirpstack
+    labels:
+      traefik.enable: true
+      traefik.http.routers.chirpstack-api.rule: Host(`api.lns.veep.vn`)
+      traefik.http.routers.chirpstack-api.entrypoints: websecure
+      traefik.http.routers.chirpstack-api.tls.certresolver: myresolver
+      traefik.http.routers.chirpstack-api.service: chirpstack-api
+      traefik.http.services.chirpstack-api.loadbalancer.server.port: 8090
 
   postgres:
     image: postgres:14-alpine
-    restart: unless-stopped
     volumes:
       - ./configuration/postgresql/initdb:/docker-entrypoint-initdb.d
-      - postgresqldata:/var/lib/postgresql/data
+      - ./postgresqldata:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
     environment:
       - POSTGRES_PASSWORD=root
 
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
     volumes:
-      - redisdata:/data
+      - ./redisdata:/data
 
   mosquitto:
     image: eclipse-mosquitto:2
-    restart: unless-stopped
     ports:
       - 1883:1883
     volumes: 
       - ./configuration/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    labels:
+      traefik.enable: true
+      traefik.http.routers.mqtt.rule: Host(`mqtt.lns.veep.vn`)
+      traefik.http.routers.mqtt.entrypoints: websecure
+      traefik.http.routers.mqtt.tls.certresolver: myresolver
+      traefik.http.routers.mqtt.service: mqtt
+      traefik.http.services.mqtt.loadbalancer.server.port: 1883
 
 volumes:
   postgresqldata:

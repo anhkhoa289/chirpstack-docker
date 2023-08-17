@@ -3,5 +3,8 @@
 !.gitattributes
 
 # data folder
+letsencrypt
+redisdata
+postgresqldata
 /data
 /lorawan-devices
