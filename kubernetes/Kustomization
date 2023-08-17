@@ -1,0 +1,33 @@
+namespace: chirpstack-dev
+
+resources:
+  - namespace.yml
+  - ingress.yml
+  - chirpstack.yml
+  - api-chirpstack.yml
+  - as923-bridge-chirpstack.yml
+  - mqtt.yml
+  - postgres.yml
+
+
+  - strapi.yml
+
+
+secretGenerator:
+  - name: postgres-config
+    literals:
+      - POSTGRES_PASSWORD=root
+      - POSTGRES_DB=chirpstack
+
+  - name: mqtt-config
+    files:
+      - ./mosquitto/mosquitto.conf
+
+
+
+  - name: strapi-env
+    literals:
+      - NODE_ENV=production
+  - name: env
+    files:
+      - ./.env
